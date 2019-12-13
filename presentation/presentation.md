@@ -1,5 +1,5 @@
 ---
-title: Why you need Rust in your life
+title: Random bits of Rust
 author: Mike Wilson
 patat:
   slideLevel: 2
@@ -19,7 +19,7 @@ patat:
 ## History
 
 * 2006 - Began as a personal project of Mozilla employee Graydon Hoare
-* 2009 - Officially Mozilla sponsorship
+* 2009 - Official Mozilla sponsorship
 * January 2012 - 0.1 released
 * May 2015 - 1.0 released
 * Nov 2019 - `async`/`.await` support included in stable release 1.39.0
@@ -38,7 +38,7 @@ sources:
 * **cargo** - build automation, package manager, scaffolding, test runner, benchmarking
 * **rustdoc** - API documentation generator
 * **rustfmt** - code formatter a la `gofmt`
-* **clitppy** - big  collection of lints
+* **clippy** - big  collection of lints
 
 All of the above are official rust projects.
 
@@ -48,7 +48,8 @@ All of the above are official rust projects.
 >   management, and a macro system
 > * Unlike C/C++, Rust prohibits pointer shenanigans
 > * Unlike C, Rust is strongly typed; implicit conversions are prohibited
-> * Like C++, Rust has powerful abstractive features, e.g. monomorphized template polymorphism
+> * Like C++, Rust has powerful abstractive features, e.g. templates (similar
+>   to generics, trait polymorphism
 > * Like Go, Rust provides message passing primitives to support safe concurrency
 > * Unlike Go, Rust has a tiny runtime; neither a GC nor a scheduler
 > * Like Haskell, Rust has ADTs, typeclass-like polymorphism,
@@ -117,8 +118,6 @@ fn main() {
         name: String::from("Stimpson J. Cat"),
         age: 2,
     };
-
-    // reassign attribute of immutable local variable
     stimpy.name = String::from("Ren");
 }
 ```
@@ -137,7 +136,40 @@ error[E0594]: cannot assign to `stimpy.name`, as `stimpy` is not declared as mut
    |     ^^^^^^^^^^^ cannot assign
 ```
 
-## Mutable and Immutable References Exist Simultaneously
+. . .
+
+Contrasted with ES6:
+
+```javascript
+const obj = {name: "Stimpson J. Cat", age: 2};
+obj.name = "Ren";
+```
+
+## Mutability of Collection Types Applies to Contained Data
+
+```rust
+fn main() {
+    let names = vec![
+        "Karl",
+        "Rosa",
+    ];
+
+    names.push("Friedrich");
+}
+```
+
+```
+error[E0596]: cannot borrow `names` as mutable, as it is not declared as mutable
+ --> src/bin/mutability3.rs:7:5
+  |
+2 |     let names = vec![
+  |         ----- help: consider changing this to be mutable: `mut names`
+...
+7 |     names.push("Friedrich");
+  |     ^^^^^ cannot borrow as mutable
+```
+
+## Mutable and Immutable References Can't Exist Simultaneously
 
 ```rust
 fn main() {
@@ -305,6 +337,33 @@ fn max<'a, T: Ord>(first: &'a T, second: &'a T) -> &'a T {
 }
 ```
 
+## Question of a Lifetime
+
+Will this compile?
+
+```rust
+fn get_best_number<'a>() -> &'a u8 {
+    let age = 2;
+    &age
+}
+
+fn main() {
+    println!("The best number is: {}", get_best_number());
+}
+```
+
+. . .
+
+Nope:
+
+```
+error[E0515]: cannot return reference to local variable `age`
+ --> src/bin/lifetime2.rs:3:5
+   |
+   3 |     &age
+     |     ^^^^ returns a reference to data owned by the current function
+```
+
 # What is Safety?
 
 ## What is Unsafety?
@@ -434,3 +493,63 @@ fn main() -> Result<(), String>{
 * The closure transforms the value returned by `do_something_dangerous()` from
   `Result<u32, String>` to `Result<(), String>`
 * the macro expression `println!("...")` has a return type of `()` (Unit)
+
+# Type Inference and Explicit Conversion
+
+## Type Inference
+
+In most type inference implementations, inferences can be made of the type of an L-value based on the type of the R-value.
+
+```rust
+# type inferred from literal
+let variable = 127u8;
+
+# type inferred from function call signature
+let variable = get_integer()
+```
+
+But in Rust, type information can also flow from left to right:
+
+```rust
+let variable: Vec<u8> = (1..10).collect();
+```
+
+Above, type information flows from LHS to RHS, conveying type information to
+`collect()` which determines which type of data structure to build (in this
+case `Vec`)
+
+## Type Inference Example
+
+```rust
+struct IPv4(u8, u8, u8, u8);
+
+impl FromStr for IPv4 {
+    fn from_str(ip_str: &str) -> Result<Self, Self::Err> {
+        // ...
+    }
+}
+
+fn parse_ips<T>(ips: &str) -> Vec<T>
+where T: From<IPv4> {
+    ips.split(" ")
+        .filter_map(|ip_str| IPv4::from_str(ip_str).ok())
+        .map(|ip: IPv4| T::from(ip))
+        .collect()
+}
+
+impl From<IPv4> for u32 {
+    fn from(ip: IPv4) -> u32 {
+        0u32
+            + ((ip.3 as u32))
+            + ((ip.2 as u32) << 8)
+            + ((ip.1 as u32) << 16)
+            + ((ip.0 as u32) << 24)
+    }
+}
+
+fn main() {
+    let ips = "256.0.0.0 0.0.0.0 127.0.0.1 192.168.0.1 1.1.1.1";
+    let parsed: Vec<u32> = parse_ips(ips);
+    println!("Parsed: {:?}", parsed);
+}
+```
